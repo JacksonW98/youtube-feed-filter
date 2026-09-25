@@ -60,12 +60,6 @@ function sendMessagePromise(message) {
   });
 }
 
-function getLocalStorage(keys) {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(keys, (result) => resolve(result || {}));
-  });
-}
-
 // The service worker may be asleep or restarting when the popup opens. Fall
 // back to defaults instead of throwing on an undefined response, which would
 // leave the controls showing whatever the HTML defaults happen to be.
@@ -91,32 +85,18 @@ function downloadJson(filename, payload) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// The service worker owns the backup format, so ask it to build the payload
+// rather than re-deriving it here from raw storage.
 async function exportData() {
-  const storageResult = await getLocalStorage([
-    "videoCounts",
-    "threshold",
-    "decayDays",
-    "pauseTracking",
-    "pauseBlocking",
-    "allowlistedVideos",
-    "allowlistedChannels"
-  ]);
-  const backup = {
-    schemaVersion: 2,
-    exportedAt: new Date().toISOString(),
-    data: {
-      videoCounts: storageResult.videoCounts || {},
-      threshold: storageResult.threshold || 5,
-      decayDays: storageResult.decayDays ?? 0,
-      pauseTracking: !!storageResult.pauseTracking,
-      pauseBlocking: !!storageResult.pauseBlocking,
-      allowlistedVideos: storageResult.allowlistedVideos || [],
-      allowlistedChannels: storageResult.allowlistedChannels || []
-    }
-  };
+  const response = await sendMessagePromise({ action: "exportData" });
 
-  const filename = `youtube-recommendation-blocker-backup-${new Date().toISOString().replaceAll(":", "-")}.json`;
-  downloadJson(filename, backup);
+  if (!response || !response.backup) {
+    throw new Error("Could not read your data.");
+  }
+
+  const stamp = new Date().toISOString().replaceAll(":", "-");
+
+  downloadJson(`youtube-recommendation-blocker-backup-${stamp}.json`, response.backup);
   setDataStatus("Backup downloaded.");
 }
 
