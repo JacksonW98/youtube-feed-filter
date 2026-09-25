@@ -39,6 +39,11 @@ function escapeHtml(value) {
 
 function loadAllowlists() {
   chrome.runtime.sendMessage({ action: "getAllowlists" }, (response) => {
+    // Reading lastError also stops Chrome logging it as unchecked.
+    if (chrome.runtime.lastError) {
+      response = null;
+    }
+
     allowlistedVideos = (response?.videos || [])
       .map((item) => normalizeItem(item, "Video"))
       .filter(Boolean);

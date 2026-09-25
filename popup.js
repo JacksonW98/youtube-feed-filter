@@ -66,6 +66,20 @@ function getLocalStorage(keys) {
   });
 }
 
+// The service worker may be asleep or restarting when the popup opens. Fall
+// back to defaults instead of throwing on an undefined response, which would
+// leave the controls showing whatever the HTML defaults happen to be.
+function requestState(message, apply, fallback) {
+  chrome.runtime.sendMessage(message, (response) => {
+    if (chrome.runtime.lastError || !response) {
+      apply(fallback);
+      return;
+    }
+
+    apply(response);
+  });
+}
+
 function downloadJson(filename, payload) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -118,21 +132,21 @@ async function importDataFromFile(file) {
   setDataStatus("Data imported.");
 }
 
-chrome.runtime.sendMessage({ action: "getThreshold" }, (response) => {
+requestState({ action: "getThreshold" }, (response) => {
   const threshold = response.threshold || 5;
   thresholdSlider.value = threshold;
   thresholdValue.textContent = threshold;
   thresholdDisplay.textContent = threshold;
   if (thresholdUnit) thresholdUnit.textContent = threshold === 1 ? "time" : "times";
-});
+}, { threshold: 5 });
 
-chrome.runtime.sendMessage({ action: "getDecayDays" }, (response) => {
-  updateDecayUI(Number.isFinite(response?.decayDays) ? response.decayDays : 0);
-});
+requestState({ action: "getDecayDays" }, (response) => {
+  updateDecayUI(Number.isFinite(response.decayDays) ? response.decayDays : 0);
+}, { decayDays: 0 });
 
-chrome.runtime.sendMessage({ action: "getPauseStates" }, (states) => {
+requestState({ action: "getPauseStates" }, (states) => {
   updatePauseUI(states);
-});
+}, { pauseTracking: false, pauseBlocking: false });
 
 thresholdSlider.addEventListener("input", (e) => {
   const value = parseInt(e.target.value);
@@ -143,7 +157,10 @@ thresholdSlider.addEventListener("input", (e) => {
   chrome.runtime.sendMessage(
     { action: "setThreshold", threshold: value },
     () => {
-      console.log("Threshold updated to", value);
+      // Reading lastError stops Chrome logging it as unchecked when the
+      // service worker is asleep. There is nothing to do on failure: the
+      // slider already shows the new value and the next open re-reads it.
+      void chrome.runtime.lastError;
     }
   );
 });
@@ -156,7 +173,10 @@ if (decayDaysSlider) {
     chrome.runtime.sendMessage(
       { action: "setDecayDays", decayDays: value },
       () => {
-        console.log("Decay days updated to", value);
+        // Reading lastError stops Chrome logging it as unchecked when the
+        // service worker is asleep. There is nothing to do on failure: the
+        // slider already shows the new value and the next open re-reads it.
+        void chrome.runtime.lastError;
       }
     );
   });
@@ -179,9 +199,9 @@ clearBtn.addEventListener("click", () => {
 function setPauseStates(states, cb) {
   chrome.runtime.sendMessage({ action: "setPauseStates", states }, () => {
     if (typeof cb === "function") cb();
-    chrome.runtime.sendMessage({ action: "getPauseStates" }, (newStates) => {
+    requestState({ action: "getPauseStates" }, (newStates) => {
       updatePauseUI(newStates);
-    });
+    }, { pauseTracking: false, pauseBlocking: false });
   });
 }
 
