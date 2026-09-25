@@ -646,6 +646,15 @@ async function fastBlockAlreadyBlocked() {
     const count = getValidCount(countsCache, videoId);
 
     if (count > THRESHOLD && !PAUSE_BLOCKING && !isAllowlistedVideo(videoId)) {
+      // processVideos() would restore an allowlisted channel's video a moment
+      // later, so check here too and avoid the visible flicker. Reading the
+      // channel is only worth it for a card about to be hidden.
+      const channelInfo = ALLOWLISTED_CHANNELS.length ? extractChannelInfo(card) : null;
+
+      if (channelInfo?.channelId && isAllowlistedChannel(channelInfo.channelId)) {
+        continue;
+      }
+
       removeCardFromLayout(card);
       log(`FAST BLOCKED ${videoId} (count: ${count})`);
     }
