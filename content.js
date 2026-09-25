@@ -388,7 +388,10 @@ function updateCountBadge(card, count) {
 async function getCounts() {
   return new Promise((resolve) => {
     sendMessageSafely({ action: "getCounts" }, (response) => {
-      resolve(response?.counts || {});
+      // Distinguish a failed read from a genuinely empty one. sendMessageSafely
+      // reports failure as null, and treating that as "no counts" would let the
+      // save below overwrite the real history with almost nothing.
+      resolve(response ? response.counts || {} : null);
     });
   });
 }
@@ -417,7 +420,15 @@ async function getDecayDays() {
 
 async function getCountsCache() {
   if (!countsCache) {
-    countsCache = normalizeCountsCache(await getCounts());
+    const counts = await getCounts();
+
+    // Leave the cache empty so the next pass retries, rather than caching a
+    // failed read and then persisting it.
+    if (!counts) {
+      return null;
+    }
+
+    countsCache = normalizeCountsCache(counts);
   }
 
   return countsCache;
@@ -702,6 +713,12 @@ async function processVideos() {
 
   try {
     const counts = await getCountsCache();
+
+    // The service worker was unreachable. Do nothing this pass and let the next
+    // mutation retry, instead of counting from zero and hiding nothing.
+    if (!counts) {
+      return;
+    }
 
     if (decayCountsCache()) {
       scheduleCountsSave();
