@@ -1,9 +1,6 @@
-console.log("YT EXTENSION LOADED");
-
 let THRESHOLD = 5;
 let DECAY_DAYS = 0;
 const DEBUG = false;
-let PAUSE_ALL = false;
 let PAUSE_TRACKING = false;
 let PAUSE_BLOCKING = false;
 let ALLOWLISTED_VIDEOS = [];
@@ -90,6 +87,8 @@ function log(...args) {
   }
 }
 
+log("content script loaded");
+
 function ensureCountBadge(card) {
   let badge = card.querySelector(".yt-extension-count-badge");
 
@@ -160,9 +159,9 @@ function removeExtensionUi() {
   }
 }
 
-// Restores only what this extension hid. restoreAllCards() clears any inline
-// display:none it finds, which off the home feed could reveal something YouTube
-// itself meant to keep hidden.
+// Restores only what this extension hid, matched by the marker set alongside
+// every display:none. Clearing inline display:none indiscriminately would risk
+// revealing something YouTube itself meant to keep hidden.
 function restoreHiddenByExtension() {
   const hidden = document.querySelectorAll('[data-yt-ext-hidden="true"]');
 
@@ -661,26 +660,6 @@ async function fastBlockAlreadyBlocked() {
   }
 }
 
-  function restoreAllCards() {
-    const cards = findCards();
-
-    for (const card of cards) {
-      const container = card.closest(
-        "ytd-rich-item-renderer, ytd-compact-video-renderer, ytd-video-renderer, ytd-grid-video-renderer"
-      ) || card;
-      if (container.style.display === "none") {
-        container.style.display = "";
-      }
-
-      // Clear internal markers so cards will be re-processed when blocking resumes
-      try {
-        delete card.dataset.ytExtRenderedVideoId;
-        delete card.dataset.videoId;
-        delete card.dataset.ytExtFastChecked;
-      } catch (e) {}
-    }
-  }
-
 function resetProcessedCards() {
   const cards = findCards();
 
@@ -858,13 +837,12 @@ function runPass() {
 
   wasActive = true;
 
-  if (PAUSE_ALL) {
-    restoreAllCards();
-  } else {
-    if (!PAUSE_BLOCKING) fastBlockAlreadyBlocked();
-    compactHomeGrid();
-    scheduleProcessVideos(150);
+  if (!PAUSE_BLOCKING) {
+    fastBlockAlreadyBlocked();
   }
+
+  compactHomeGrid();
+  scheduleProcessVideos(150);
 }
 
 const observer = new MutationObserver(runPass);
@@ -900,7 +878,8 @@ function init(res) {
     wasActive = true;
 
     if (PAUSE_TRACKING && PAUSE_BLOCKING) {
-      restoreAllCards();
+      restoreHiddenByExtension();
+      resetProcessedCards();
     } else {
       fastBlockAlreadyBlocked();
       processVideos();
