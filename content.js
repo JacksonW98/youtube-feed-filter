@@ -89,6 +89,19 @@ function log(...args) {
 
 log("content script loaded");
 
+// Isolate the thumbnail so the overlays can't draw over YouTube's stuff.
+function prepareOverlayHost(card) {
+  const host = card.querySelector("#thumbnail") || card;
+
+  if (getComputedStyle(host).position === "static") {
+    host.style.position = "relative";
+  }
+
+  host.style.isolation = "isolate";
+
+  return host;
+}
+
 function ensureCountBadge(card) {
   let badge = card.querySelector(".yt-extension-count-badge");
 
@@ -96,11 +109,7 @@ function ensureCountBadge(card) {
     return badge;
   }
 
-  const badgeHost = card.querySelector("#thumbnail") || card;
-
-  if (getComputedStyle(badgeHost).position === "static") {
-    badgeHost.style.position = "relative";
-  }
+  const badgeHost = prepareOverlayHost(card);
 
   badge = document.createElement("div");
   badge.className = "yt-extension-count-badge";
@@ -108,7 +117,7 @@ function ensureCountBadge(card) {
     position: absolute;
     top: 8px;
     left: 8px;
-    z-index: 9999;
+    z-index: 2;
     padding: 4px 8px;
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.8);
@@ -319,11 +328,7 @@ function ensureAllowButtons(card, videoId, videoName, channelInfo) {
   }
 
   if (!buttonContainer) {
-    const badgeHost = card.querySelector("#thumbnail") || card;
-
-    if (getComputedStyle(badgeHost).position === "static") {
-      badgeHost.style.position = "relative";
-    }
+    const badgeHost = prepareOverlayHost(card);
 
     buttonContainer = document.createElement("div");
     buttonContainer.className = "yt-extension-allow-buttons";
@@ -332,7 +337,7 @@ function ensureAllowButtons(card, videoId, videoName, channelInfo) {
       position: absolute;
       top: 8px;
       right: 8px;
-      z-index: 9998;
+      z-index: 2;
       display: flex;
       gap: 4px;
       pointer-events: auto;
